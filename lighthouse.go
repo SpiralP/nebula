@@ -392,7 +392,7 @@ func getStaticMapLookupTimeout(c *config.C) (time.Duration, error) {
 }
 
 func getStaticMapNetwork(c *config.C) (string, error) {
-	network := c.GetString("static_map.network", "ip4")
+	network := c.GetString("static_map.network", "ip")
 	if network != "ip" && network != "ip4" && network != "ip6" {
 		return "", fmt.Errorf("static_map.network must be one of ip, ip4, or ip6")
 	}
