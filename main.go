@@ -149,7 +149,7 @@ func Main(c *config.C, configTest bool, buildVersion string, logger *logrus.Logg
 	port := c.GetInt("listen.port", 0)
 
 	if !configTest {
-		rawListenHost := c.GetString("listen.host", "0.0.0.0")
+		rawListenHost := c.GetString("listen.host", "::")
 		var listenHost *net.IPAddr
 		if rawListenHost == "[::]" {
 			// Old guidance was to provide the literal `[::]` in `listen.host` but that won't resolve.
