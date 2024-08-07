@@ -142,7 +142,7 @@ func Main(c *config.C, configTest bool, buildVersion string, l *slog.Logger, dev
 	}()
 
 	if !configTest {
-		rawListenHost := c.GetString("listen.host", "0.0.0.0")
+		rawListenHost := c.GetString("listen.host", "::")
 		var listenHost netip.Addr
 		if rawListenHost == "[::]" {
 			// Old guidance was to provide the literal `[::]` in `listen.host` but that won't resolve.
