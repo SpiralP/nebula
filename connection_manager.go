@@ -70,8 +70,8 @@ func newConnectionManagerFromConfig(l *logrus.Logger, c *config.C, hm *HostMap, 
 
 func (cm *connectionManager) reload(c *config.C, initial bool) {
 	if initial {
-		cm.checkInterval = time.Duration(c.GetInt("timers.connection_alive_interval", 5)) * time.Second
-		cm.pendingDeletionInterval = time.Duration(c.GetInt("timers.pending_deletion_interval", 10)) * time.Second
+		cm.checkInterval = time.Duration(c.GetInt("timers.connection_alive_interval", 9)) * time.Second
+		cm.pendingDeletionInterval = time.Duration(c.GetInt("timers.pending_deletion_interval", 20)) * time.Second
 
 		// We want at least a minimum resolution of 500ms per tick so that we can hit these intervals
 		// pretty close to their configured duration.
