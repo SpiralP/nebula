@@ -220,8 +220,8 @@ func Main(c *config.C, configTest bool, buildVersion string, logger *logrus.Logg
 		}
 	}
 
-	checkInterval := c.GetInt("timers.connection_alive_interval", 5)
-	pendingDeletionInterval := c.GetInt("timers.pending_deletion_interval", 10)
+	checkInterval := c.GetInt("timers.connection_alive_interval", 9)
+	pendingDeletionInterval := c.GetInt("timers.pending_deletion_interval", 20)
 
 	ifConfig := &InterfaceConfig{
 		HostMap:                 hostMap,
