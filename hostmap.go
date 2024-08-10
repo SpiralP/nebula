@@ -30,7 +30,7 @@ const MaxHostInfosPerVpnIp = 5
 
 // How long we should prevent roaming back to the previous IP.
 // This helps prevent flapping due to packets already in flight
-const RoamingSuppressSeconds = 2
+const RoamingSuppressSeconds = 10
 
 const (
 	Requested = iota
