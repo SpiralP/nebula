@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"os"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -20,7 +21,7 @@ import (
 
 type m = map[string]any
 
-func Main(c *config.C, configTest bool, buildVersion string, l *slog.Logger, deviceFactory overlay.DeviceFactory) (retcon *Control, reterr error) {
+func Main(c *config.C, configTest bool, buildVersion string, l *slog.Logger, deviceFactory overlay.DeviceFactory, sigChan chan os.Signal) (retcon *Control, reterr error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	// Automatically cancel the context if Main returns an error, to signal all created goroutines to quit.
 	defer func() {
@@ -266,7 +267,7 @@ func Main(c *config.C, configTest bool, buildVersion string, l *slog.Logger, dev
 
 	go ifce.emitStats(ctx, c.GetDuration("stats.interval", time.Second*10))
 
-	attachCommands(l, c, ssh, ifce)
+	attachCommands(l, c, ssh, ifce, sigChan)
 
 	networkChanges := udp.NewNetworkChangeMonitor(ctx, l, c)
 
