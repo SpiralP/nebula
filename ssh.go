@@ -199,7 +199,7 @@ func configSSH(l *slog.Logger, ssh *sshd.SSHServer, c *config.C) (func(), error)
 	return runner, nil
 }
 
-func attachCommands(l *slog.Logger, c *config.C, ssh *sshd.SSHServer, f *Interface) {
+func attachCommands(l *slog.Logger, c *config.C, ssh *sshd.SSHServer, f *Interface, sigChan chan os.Signal) {
 	// sandboxDir defaults to a dir in temp. The intention is that end user will
 	// create this dir as needed. Overriding this config value to "" allows
 	// writing to anywhere in the system.
@@ -266,10 +266,8 @@ func attachCommands(l *slog.Logger, c *config.C, ssh *sshd.SSHServer, f *Interfa
 		ShortDescription: "Shuts down nebula",
 		Callback: func(fs any, a []string, w sshd.StringWriter) error {
 			err := w.WriteLine("Stopping")
-			if err != nil {
-				return err
-			}
-			return syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+			sigChan <- syscall.SIGTERM
+			return err
 		},
 	})
 
