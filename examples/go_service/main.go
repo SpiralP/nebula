@@ -67,7 +67,7 @@ pki:
 	logger := logrus.New()
 	logger.Out = os.Stdout
 
-	ctrl, err := nebula.Main(&cfg, false, "custom-app", logger, overlay.NewUserDeviceFromConfig)
+	ctrl, err := nebula.Main(&cfg, false, "custom-app", logger, overlay.NewUserDeviceFromConfig, nil)
 	if err != nil {
 		return err
 	}
