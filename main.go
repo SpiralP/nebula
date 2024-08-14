@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"os"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -18,7 +19,7 @@ import (
 
 type m map[string]interface{}
 
-func Main(c *config.C, configTest bool, buildVersion string, logger *logrus.Logger, deviceFactory overlay.DeviceFactory) (retcon *Control, reterr error) {
+func Main(c *config.C, configTest bool, buildVersion string, logger *logrus.Logger, deviceFactory overlay.DeviceFactory, sigChan chan os.Signal) (retcon *Control, reterr error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	// Automatically cancel the context if Main returns an error, to signal all created goroutines to quit.
 	defer func() {
@@ -293,7 +294,7 @@ func Main(c *config.C, configTest bool, buildVersion string, logger *logrus.Logg
 	//TODO: check if we _should_ be emitting stats
 	go ifce.emitStats(ctx, c.GetDuration("stats.interval", time.Second*10))
 
-	attachCommands(l, c, ssh, ifce)
+	attachCommands(l, c, ssh, ifce, sigChan)
 
 	// Start DNS server last to allow using the nebula IP as lighthouse.dns.host
 	var dnsStart func()
