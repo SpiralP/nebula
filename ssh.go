@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/sirupsen/logrus"
 	"github.com/slackhq/nebula/config"
@@ -244,6 +245,18 @@ func attachCommands(l *logrus.Logger, c *config.C, ssh *sshd.SSHServer, f *Inter
 		ShortDescription: "Reloads configuration from disk, same as sending HUP to the process",
 		Callback: func(fs interface{}, a []string, w sshd.StringWriter) error {
 			return sshReload(c, w)
+		},
+	})
+
+	ssh.RegisterCommand(&sshd.Command{
+		Name:             "stop",
+		ShortDescription: "Shuts down nebula",
+		Callback: func(fs interface{}, a []string, w sshd.StringWriter) error {
+			err := w.WriteLine("Stopping")
+			if err != nil {
+				return err
+			}
+			return syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
 		},
 	})
 
