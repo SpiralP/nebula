@@ -1,7 +1,7 @@
 on:
   push:
     tags:
-    - 'v[0-9]+.[0-9]+.[0-9]*'
+      - "v[0-9]+.[0-9]+.[0-9]*"
 
 name: Create release and upload binaries
 
@@ -19,7 +19,7 @@ jobs:
 
       - name: Build
         run: |
-          make BUILD_NUMBER="${GITHUB_REF#refs/tags/v}" release-linux release-freebsd release-openbsd release-netbsd
+          make BUILD_NUMBER="${GITHUB_REF#refs/tags/v}" release-linux
           mkdir release
           mv build/*.tar.gz release
 
@@ -57,191 +57,15 @@ jobs:
           mkdir build\dist\windows
           mv dist\windows\wintun build\dist\windows\
 
-      - name: Code-sign
-        uses: ./.github/actions/code-sign
-        with:
-          path: build
-          role: ${{ secrets.DEFINED_CODE_SIGNER_ROLE }}
-          bucket: ${{ secrets.DEFINED_CODE_SIGNER_BUCKET }}
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
           name: windows-latest
           path: build
 
-  build-darwin:
-    name: Build Universal Darwin
-    env:
-      HAS_SIGNING_CREDS: ${{ secrets.APPLE_SIGNING_ROLE_ARN != '' }}
-    runs-on: macos-latest
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v7
-        with:
-          go-version: '1.26'
-          check-latest: true
-
-      # GitHub holds ARNs, not credentials, and ARNs outlive a rotation
-      - name: Configure AWS credentials
-        if: env.HAS_SIGNING_CREDS == 'true'
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          role-to-assume: ${{ secrets.APPLE_SIGNING_ROLE_ARN }}
-          aws-region: us-east-2
-
-      # parse-json-secrets unpacks into SIGNING_* and ASC_*, masked on the way in
-      - name: Fetch signing credentials
-        if: env.HAS_SIGNING_CREDS == 'true'
-        uses: aws-actions/aws-secretsmanager-get-secrets@v3
-        with:
-          parse-json-secrets: true
-          secret-ids: |
-            SIGNING,${{ secrets.APPLE_SIGNING_DEVELOPER_ID_ARN }}
-            ASC,${{ secrets.APPLE_NOTARY_KEY_ARN }}
-
-      - name: Import certificates
-        if: env.HAS_SIGNING_CREDS == 'true'
-        uses: Apple-Actions/import-codesign-certs@v7
-        with:
-          p12-file-base64: ${{ env.SIGNING_P12_BASE64 }}
-          p12-password: ${{ env.SIGNING_PASSWORD }}
-
-      # The action imports but does not check the chain validates, which is how a p12
-      # missing its intermediate reaches a failing codesign
-      - name: Check the identity is usable
-        if: env.HAS_SIGNING_CREDS == 'true'
-        run: |
-          : "${SIGNING_IDENTITY_SHA1:?empty, so the secret has no identity_sha1}"
-          identities=$(security find-identity -v -p codesigning signing_temp.keychain)
-          case "$identities" in
-          *"$SIGNING_IDENTITY_SHA1"*) ;;
-          *) printf '%s\n' "$identities" >&2; exit 1 ;;
-          esac
-
-      # notarytool wants the key as a file
-      - name: Write the App Store Connect key
-        if: env.HAS_SIGNING_CREDS == 'true'
-        run: |
-          mkdir -p ~/private_keys
-          chmod 700 ~/private_keys
-          key_path="$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8"
-          (umask 077; printf '%s\n' "$ASC_PRIVATE_KEY" > "$key_path")
-          echo "ASC_P8=$key_path" >> "$GITHUB_ENV"
-
-      - name: Drop the credentials from the environment
-        if: env.HAS_SIGNING_CREDS == 'true'
-        run: |
-          # The action's own inventory, so a new field in a secret is covered
-          python3 -c '
-          import json, os
-          raw = os.environ.get("SECRETS_LIST_CLEAN_UP")
-          if raw is None and os.environ.get("SIGNING_P12_BASE64"):
-              raise SystemExit("SECRETS_LIST_CLEAN_UP is gone, fetched secrets are not being scrubbed")
-          keep = {"SIGNING_IDENTITY_SHA1", "ASC_KEY_ID", "ASC_ISSUER_ID"}
-          names = [n for n in json.loads(raw or "[]") if n not in keep]
-          print("\n".join(f"{n}=" for n in dict.fromkeys(names)))
-          ' >> "$GITHUB_ENV"
-
-      - name: Build, sign, and notarize
-        run: |
-          rm -rf release
-          mkdir release
-          make BUILD_NUMBER="${GITHUB_REF#refs/tags/v}" service build/darwin-amd64/nebula build/darwin-amd64/nebula-cert
-          make BUILD_NUMBER="${GITHUB_REF#refs/tags/v}" service build/darwin-arm64/nebula build/darwin-arm64/nebula-cert
-          lipo -create -output ./release/nebula ./build/darwin-amd64/nebula ./build/darwin-arm64/nebula
-          lipo -create -output ./release/nebula-cert ./build/darwin-amd64/nebula-cert ./build/darwin-arm64/nebula-cert
-
-          # Unset in a fork, which has no credentials to sign with
-          if [ -n "$SIGNING_IDENTITY_SHA1" ]; then
-            codesign -s "$SIGNING_IDENTITY_SHA1" -f -v --timestamp --options=runtime -i "net.defined.nebula" ./release/nebula
-            codesign -s "$SIGNING_IDENTITY_SHA1" -f -v --timestamp --options=runtime -i "net.defined.nebula-cert" ./release/nebula-cert
-          fi
-
-          zip -j release/nebula-darwin.zip release/nebula-cert release/nebula
-
-          if [ -n "$ASC_P8" ]; then
-            xcrun notarytool submit ./release/nebula-darwin.zip --key "$ASC_P8" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" --wait
-          fi
-
-      - name: Drop the signing key
-        if: always() && env.HAS_SIGNING_CREDS == 'true'
-        run: |
-          # Locked, not deleted: import-codesign-certs deletes it in its own post
-          # step and fails the job if it is already gone. Locked is unusable.
-          security lock-keychain signing_temp.keychain || true
-          rm -f "$ASC_P8"
-          # Nothing later in this job needs AWS
-          python3 -c '
-          import json, os
-          names = json.loads(os.environ.get("SECRETS_LIST_CLEAN_UP") or "[]")
-          names += ["ASC_P8", "SIGNING_IDENTITY_SHA1", "ASC_KEY_ID", "ASC_ISSUER_ID",
-                    "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"]
-          print("\n".join(f"{n}=" for n in dict.fromkeys(names)))
-          ' >> "$GITHUB_ENV"
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: darwin-latest
-          path: ./release/*
-
-  build-docker:
-    name: Create and Upload Docker Images
-    # Technically we only need build-linux to succeed, but if any platforms fail we'll
-    # want to investigate and restart the build
-    needs: [build-linux, build-darwin, build-windows]
-    runs-on: ubuntu-latest
-    env:
-      HAS_DOCKER_CREDS: ${{ vars.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
-    # XXX It's not possible to write a conditional here, so instead we do it on every step
-    #if: ${{ env.HAS_DOCKER_CREDS == 'true' }}
-    steps:
-      # Be sure to checkout the code before downloading artifacts, or they will
-      # be overwritten
-      - name: Checkout code
-        if: ${{ env.HAS_DOCKER_CREDS == 'true' }}
-        uses: actions/checkout@v7
-
-      - name: Download artifacts
-        if: ${{ env.HAS_DOCKER_CREDS == 'true' }}
-        uses: actions/download-artifact@v8
-        with:
-          name: linux-latest
-          path: artifacts
-
-      - name: Login to Docker Hub
-        if: ${{ env.HAS_DOCKER_CREDS == 'true' }}
-        uses: docker/login-action@v4
-        with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        if: ${{ env.HAS_DOCKER_CREDS == 'true' }}
-        uses: docker/setup-buildx-action@v4
-
-      - name: Build and push images
-        if: ${{ env.HAS_DOCKER_CREDS == 'true' }}
-        env:
-          DOCKER_IMAGE_REPO: ${{ vars.DOCKER_IMAGE_REPO || 'nebulaoss/nebula' }}
-          DOCKER_IMAGE_TAG: ${{ vars.DOCKER_IMAGE_TAG || 'latest' }}
-        run: |
-          mkdir -p build/linux-{amd64,arm64}
-          tar -zxvf artifacts/nebula-linux-amd64.tar.gz -C build/linux-amd64/
-          tar -zxvf artifacts/nebula-linux-arm64.tar.gz -C build/linux-arm64/
-          docker buildx build . --push -f docker/Dockerfile --platform linux/amd64,linux/arm64 \
-            --build-arg VERSION="${GITHUB_REF#refs/tags/v}" \
-            --build-arg REVISION="${GITHUB_SHA}" \
-            --tag "${DOCKER_IMAGE_REPO}:${DOCKER_IMAGE_TAG}" --tag "${DOCKER_IMAGE_REPO}:${GITHUB_REF#refs/tags/v}"
-
   release:
     name: Create and Upload Release
-    needs: [build-linux, build-darwin, build-windows]
+    needs: [build-linux, build-windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -262,7 +86,7 @@ jobs:
       - name: Create sha256sum
         run: |
           cd artifacts
-          for dir in linux-latest darwin-latest windows-latest
+          for dir in linux-latest windows-latest
           do
             (
               cd $dir
