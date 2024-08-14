@@ -77,7 +77,8 @@ func main() {
 		}
 	})
 
-	ctrl, err := nebula.Main(c, *configTest, Build, l, nil)
+	sigChan := make(chan os.Signal, 1)
+	ctrl, err := nebula.Main(c, *configTest, Build, l, nil, sigChan)
 	if err != nil {
 		util.LogWithContextIfNeeded("Failed to start", err, l)
 		os.Exit(1)
@@ -89,7 +90,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		go ctrl.ShutdownBlock()
+		go ctrl.ShutdownBlock(sigChan)
 		notifyReady(l)
 
 		if err := ctrl.Wait(); err != nil {
