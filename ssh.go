@@ -187,7 +187,7 @@ func configSSH(l *logrus.Logger, ssh *sshd.SSHServer, c *config.C) (func(), erro
 	return runner, nil
 }
 
-func attachCommands(l *logrus.Logger, c *config.C, ssh *sshd.SSHServer, f *Interface) {
+func attachCommands(l *logrus.Logger, c *config.C, ssh *sshd.SSHServer, f *Interface, sigChan chan os.Signal) {
 	ssh.RegisterCommand(&sshd.Command{
 		Name:             "list-hostmap",
 		ShortDescription: "List all known previously connected hosts",
@@ -248,10 +248,8 @@ func attachCommands(l *logrus.Logger, c *config.C, ssh *sshd.SSHServer, f *Inter
 		ShortDescription: "Shuts down nebula",
 		Callback: func(fs interface{}, a []string, w sshd.StringWriter) error {
 			err := w.WriteLine("Stopping")
-			if err != nil {
-				return err
-			}
-			return syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+			sigChan <- syscall.SIGTERM
+			return err
 		},
 	})
 
