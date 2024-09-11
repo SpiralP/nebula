@@ -61,6 +61,8 @@ jobs:
           path: build
 
   release:
+    permissions:
+      contents: write
     name: Create and Upload Release
     needs: [build-linux, build-windows]
     runs-on: ubuntu-latest
