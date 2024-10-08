@@ -15,5 +15,6 @@
 **.crt
 **.key
 **.pem
+**.pub
 !/examples/quickstart-vagrant/ansible/roles/nebula/files/vagrant-test-ca.key
 !/examples/quickstart-vagrant/ansible/roles/nebula/files/vagrant-test-ca.crt
