@@ -14,7 +14,7 @@
 
           src = lib.sourceFilesBySuffices ./. [ ".go" ".mod" ".sum" ];
 
-          vendorHash = "sha256-oXhq+s5gDKPVClZpOzYi7BaYwcDqbCLBEO5BNGy9LJA=";
+          vendorHash = "sha256-b1yzmCzC/z2azUuiI5Ia+/KRNT/AZRYRth8sU5OIrq8=";
 
           subPackages = [ "cmd/nebula" "cmd/nebula-cert" ];
 
