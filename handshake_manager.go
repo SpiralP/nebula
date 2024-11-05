@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	DefaultHandshakeTryInterval   = time.Millisecond * 100
-	DefaultHandshakeRetries       = 10
+	DefaultHandshakeTryInterval   = time.Millisecond * 1000
+	DefaultHandshakeRetries       = 5
 	DefaultHandshakeTriggerBuffer = 64
 
 	// maxCachedPackets is how many unsent packets we'll buffer per pending
