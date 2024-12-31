@@ -7,10 +7,13 @@
     let
       inherit (nixpkgs) lib;
 
+      revSuffix = lib.optionalString (self ? shortRev || self ? dirtyShortRev)
+        "-${self.shortRev or self.dirtyShortRev}";
+
       makePackages = (pkgs: {
         default = pkgs.buildGoModule rec {
           pname = "nebula";
-          version = "1.9.5-custom-${self.shortRev or self.dirtyShortRev}";
+          version = "1.9.5-custom" + revSuffix;
 
           src = lib.sourceFilesBySuffices ./. [ ".go" ".mod" ".sum" ];
 
