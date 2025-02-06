@@ -90,7 +90,7 @@ func renderHostmap(f *Interface) (string, []*edge) {
 	if len(f.hostMap.Relays) > 0 {
 		r += fmt.Sprintf("\t\tsubgraph %s.relays[\"Relays (relay index to hostinfo)\"]\n", clusterName)
 		for relayIndex, hi := range f.hostMap.Relays {
-			r += fmt.Sprintf("\t\t\t%v.%v[\"%v\"]\n", clusterName, relayIndex, relayIndex)
+			r += fmt.Sprintf("\t\t\t%v.%v[\"%v (%v)\"]\n", clusterName, relayIndex, relayIndex, hi.vpnIp)
 			lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, relayIndex, clusterName, hi.localIndexId))
 		}
 		r += "\t\tend\n"
