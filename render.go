@@ -1,15 +1,10 @@
-//go:build e2e_testing
-// +build e2e_testing
-
-package router
+package nebula
 
 import (
 	"fmt"
 	"net/netip"
 	"sort"
 	"strings"
-
-	"github.com/slackhq/nebula"
 )
 
 type edge struct {
@@ -18,10 +13,18 @@ type edge struct {
 	dual bool
 }
 
-func renderHostmaps(controls ...*nebula.Control) string {
+func RenderControlsHostmaps(controls ...*Control) string {
+	interfaces := make([]*Interface, len(controls))
+	for i, c := range controls {
+		interfaces[i] = c.f
+	}
+	return RenderHostmaps(interfaces...)
+}
+
+func RenderHostmaps(interfaces ...*Interface) string {
 	var lines []*edge
 	r := "graph TB\n"
-	for _, c := range controls {
+	for _, c := range interfaces {
 		sr, se := renderHostmap(c)
 		r += sr
 		for _, e := range se {
@@ -54,56 +57,54 @@ func renderHostmaps(controls ...*nebula.Control) string {
 	return r
 }
 
-func renderHostmap(c *nebula.Control) (string, []*edge) {
+func renderHostmap(f *Interface) (string, []*edge) {
 	var lines []string
 	var globalLines []*edge
 
-	clusterName := strings.Trim(c.GetCert().Details.Name, " ")
-	clusterVpnIp := c.GetCert().Details.Ips[0].IP
+	clusterName := strings.Trim(f.pki.GetCertState().Certificate.Details.Name, " ")
+	clusterVpnIp := f.pki.GetCertState().Certificate.Details.Ips[0].IP
 	r := fmt.Sprintf("\tsubgraph %s[\"%s (%s)\"]\n", clusterName, clusterName, clusterVpnIp)
 
-	hm := c.GetHostmap()
-	hm.RLock()
-	defer hm.RUnlock()
+	f.hostMap.RLock()
+	defer f.hostMap.RUnlock()
 
 	// Draw the vpn to index nodes
 	r += fmt.Sprintf("\t\tsubgraph %s.hosts[\"Hosts (vpn ip to index)\"]\n", clusterName)
-	hosts := sortedHosts(hm.Hosts)
+	hosts := sortedHosts(f.hostMap.Hosts)
 	for _, vpnIp := range hosts {
-		hi := hm.Hosts[vpnIp]
+		hi := f.hostMap.Hosts[vpnIp]
 		r += fmt.Sprintf("\t\t\t%v.%v[\"%v\"]\n", clusterName, vpnIp, vpnIp)
-		lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, vpnIp, clusterName, hi.GetLocalIndex()))
+		lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, vpnIp, clusterName, hi.localIndexId))
 
-		rs := hi.GetRelayState()
-		for _, relayIp := range rs.CopyRelayIps() {
+		for _, relayIp := range hi.relayState.CopyRelayIps() {
 			lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, vpnIp, clusterName, relayIp))
 		}
 
-		for _, relayIp := range rs.CopyRelayForIdxs() {
+		for _, relayIp := range hi.relayState.CopyRelayForIdxs() {
 			lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, vpnIp, clusterName, relayIp))
 		}
 	}
 	r += "\t\tend\n"
 
 	// Draw the relay hostinfos
-	if len(hm.Relays) > 0 {
+	if len(f.hostMap.Relays) > 0 {
 		r += fmt.Sprintf("\t\tsubgraph %s.relays[\"Relays (relay index to hostinfo)\"]\n", clusterName)
-		for relayIndex, hi := range hm.Relays {
-			r += fmt.Sprintf("\t\t\t%v.%v[\"%v\"]\n", clusterName, relayIndex, relayIndex)
-			lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, relayIndex, clusterName, hi.GetLocalIndex()))
+		for relayIndex, hi := range f.hostMap.Relays {
+			r += fmt.Sprintf("\t\t\t%v.%v[\"%v (%v)\"]\n", clusterName, relayIndex, relayIndex, hi.vpnIp)
+			lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, relayIndex, clusterName, hi.localIndexId))
 		}
 		r += "\t\tend\n"
 	}
 
 	// Draw the local index to relay or remote index nodes
 	r += fmt.Sprintf("\t\tsubgraph indexes.%s[\"Indexes (index to hostinfo)\"]\n", clusterName)
-	indexes := sortedIndexes(hm.Indexes)
+	indexes := sortedIndexes(f.hostMap.Indexes)
 	for _, idx := range indexes {
-		hi, ok := hm.Indexes[idx]
+		hi, ok := f.hostMap.Indexes[idx]
 		if ok {
-			r += fmt.Sprintf("\t\t\t%v.%v[\"%v (%v)\"]\n", clusterName, idx, idx, hi.GetVpnIp())
+			r += fmt.Sprintf("\t\t\t%v.%v[\"%v (%v)\"]\n", clusterName, idx, idx, hi.remote)
 			remoteClusterName := strings.Trim(hi.GetCert().Details.Name, " ")
-			globalLines = append(globalLines, &edge{from: fmt.Sprintf("%v.%v", clusterName, idx), to: fmt.Sprintf("%v.%v", remoteClusterName, hi.GetRemoteIndex())})
+			globalLines = append(globalLines, &edge{from: fmt.Sprintf("%v.%v", clusterName, idx), to: fmt.Sprintf("%v.%v", remoteClusterName, hi.remoteIndexId)})
 			_ = hi
 		}
 	}
@@ -118,7 +119,7 @@ func renderHostmap(c *nebula.Control) (string, []*edge) {
 	return r, globalLines
 }
 
-func sortedHosts(hosts map[netip.Addr]*nebula.HostInfo) []netip.Addr {
+func sortedHosts(hosts map[netip.Addr]*HostInfo) []netip.Addr {
 	keys := make([]netip.Addr, 0, len(hosts))
 	for key := range hosts {
 		keys = append(keys, key)
@@ -131,7 +132,7 @@ func sortedHosts(hosts map[netip.Addr]*nebula.HostInfo) []netip.Addr {
 	return keys
 }
 
-func sortedIndexes(indexes map[uint32]*nebula.HostInfo) []uint32 {
+func sortedIndexes(indexes map[uint32]*HostInfo) []uint32 {
 	keys := make([]uint32, 0, len(indexes))
 	for key := range indexes {
 		keys = append(keys, key)

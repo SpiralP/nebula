@@ -284,7 +284,7 @@ func (r *R) RenderHostmaps(title string, controls ...*nebula.Control) {
 	r.Lock()
 	defer r.Unlock()
 
-	s := renderHostmaps(controls...)
+	s := nebula.RenderControlsHostmaps(controls...)
 	if len(r.additionalGraphs) > 0 {
 		lastGraph := r.additionalGraphs[len(r.additionalGraphs)-1]
 		if lastGraph.content == s && lastGraph.title == title {
@@ -306,7 +306,7 @@ func (r *R) renderHostmaps(title string) {
 		return c[i].GetVpnIp().Compare(c[j].GetVpnIp()) > 0
 	})
 
-	s := renderHostmaps(c...)
+	s := nebula.RenderControlsHostmaps(c...)
 	if len(r.additionalGraphs) > 0 {
 		lastGraph := r.additionalGraphs[len(r.additionalGraphs)-1]
 		if lastGraph.content == s {
