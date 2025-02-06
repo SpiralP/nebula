@@ -65,15 +65,14 @@ func renderHostmap(f *Interface) (string, []*edge) {
 	clusterVpnIp := f.pki.GetCertState().Certificate.Details.Ips[0].IP
 	r := fmt.Sprintf("\tsubgraph %s[\"%s (%s)\"]\n", clusterName, clusterName, clusterVpnIp)
 
-	hm := f.hostMap
-	hm.RLock()
-	defer hm.RUnlock()
+	f.hostMap.RLock()
+	defer f.hostMap.RUnlock()
 
 	// Draw the vpn to index nodes
 	r += fmt.Sprintf("\t\tsubgraph %s.hosts[\"Hosts (vpn ip to index)\"]\n", clusterName)
-	hosts := sortedHosts(hm.Hosts)
+	hosts := sortedHosts(f.hostMap.Hosts)
 	for _, vpnIp := range hosts {
-		hi := hm.Hosts[vpnIp]
+		hi := f.hostMap.Hosts[vpnIp]
 		r += fmt.Sprintf("\t\t\t%v.%v[\"%v\"]\n", clusterName, vpnIp, vpnIp)
 		lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, vpnIp, clusterName, hi.localIndexId))
 
@@ -88,9 +87,9 @@ func renderHostmap(f *Interface) (string, []*edge) {
 	r += "\t\tend\n"
 
 	// Draw the relay hostinfos
-	if len(hm.Relays) > 0 {
+	if len(f.hostMap.Relays) > 0 {
 		r += fmt.Sprintf("\t\tsubgraph %s.relays[\"Relays (relay index to hostinfo)\"]\n", clusterName)
-		for relayIndex, hi := range hm.Relays {
+		for relayIndex, hi := range f.hostMap.Relays {
 			r += fmt.Sprintf("\t\t\t%v.%v[\"%v\"]\n", clusterName, relayIndex, relayIndex)
 			lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, relayIndex, clusterName, hi.localIndexId))
 		}
@@ -99,11 +98,11 @@ func renderHostmap(f *Interface) (string, []*edge) {
 
 	// Draw the local index to relay or remote index nodes
 	r += fmt.Sprintf("\t\tsubgraph indexes.%s[\"Indexes (index to hostinfo)\"]\n", clusterName)
-	indexes := sortedIndexes(hm.Indexes)
+	indexes := sortedIndexes(f.hostMap.Indexes)
 	for _, idx := range indexes {
-		hi, ok := hm.Indexes[idx]
+		hi, ok := f.hostMap.Indexes[idx]
 		if ok {
-			r += fmt.Sprintf("\t\t\t%v.%v[\"%v (%v)\"]\n", clusterName, idx, idx, hi.vpnIp)
+			r += fmt.Sprintf("\t\t\t%v.%v[\"%v (%v)\"]\n", clusterName, idx, idx, hi.remote)
 			remoteClusterName := strings.Trim(hi.GetCert().Details.Name, " ")
 			globalLines = append(globalLines, &edge{from: fmt.Sprintf("%v.%v", clusterName, idx), to: fmt.Sprintf("%v.%v", remoteClusterName, hi.remoteIndexId)})
 			_ = hi
