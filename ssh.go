@@ -272,6 +272,16 @@ func attachCommands(l *slog.Logger, c *config.C, ssh *sshd.SSHServer, f *Interfa
 	})
 
 	ssh.RegisterCommand(&sshd.Command{
+		Name:             "mermaid",
+		ShortDescription: "Outputs a mermaid diagram of the current network",
+		Callback: func(fs any, a []string, w sshd.StringWriter) error {
+			s := RenderHostmaps(f)
+			err := w.WriteLine(s)
+			return err
+		},
+	})
+
+	ssh.RegisterCommand(&sshd.Command{
 		Name:             "start-cpu-profile",
 		ShortDescription: "Starts a cpu profile and write output to the provided file, ex: `cpu-profile.pb.gz`",
 		Callback: func(fs any, a []string, w sshd.StringWriter) error {
