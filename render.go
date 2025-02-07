@@ -52,6 +52,9 @@ func RenderHostmaps(mermaid bool, interfaces ...*Interface) string {
 		}
 	}
 
+	sort.SliceStable(lines, func(i, j int) bool {
+		return lines[i].from < lines[j].from
+	})
 	for _, line := range lines {
 		if mermaid {
 			if line.dual {
@@ -140,7 +143,9 @@ func renderHostmap(mermaid bool, f *Interface) (string, []*edge) {
 			r += fmt.Sprintf("\t\tsubgraph cluster_%s_relays {\n", clusterName)
 			r += "\t\t\tlabel=\"Relays (relay index to hostinfo)\"\n"
 		}
-		for relayIndex, hi := range f.hostMap.Relays {
+		indexes := sortedIndexes(f.hostMap.Relays)
+		for _, relayIndex := range indexes {
+			hi := f.hostMap.Relays[relayIndex]
 			if mermaid {
 				r += fmt.Sprintf("\t\t\t%v.%v[\"%v (%v)\"]\n", clusterName, relayIndex, relayIndex, hi.vpnAddrs)
 				lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, relayIndex, clusterName, hi.localIndexId))
@@ -209,13 +214,13 @@ func sortedHosts(hosts map[netip.Addr]*HostInfo) []netip.Addr {
 	}
 
 	sort.SliceStable(keys, func(i, j int) bool {
-		return keys[i].Compare(keys[j]) > 0
+		return keys[i].Compare(keys[j]) < 0
 	})
 
 	return keys
 }
 
-func sortedIndexes(indexes map[uint32]*HostInfo) []uint32 {
+func sortedIndexes[V any](indexes map[uint32]V) []uint32 {
 	keys := make([]uint32, 0, len(indexes))
 	for key := range indexes {
 		keys = append(keys, key)
