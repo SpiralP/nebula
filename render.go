@@ -28,7 +28,6 @@ func RenderHostmaps(mermaid bool, interfaces ...*Interface) string {
 		r += "graph TB\n"
 	} else {
 		r += "digraph G {\n"
-		r += "\tcompound=true\n"
 	}
 
 	for _, c := range interfaces {
