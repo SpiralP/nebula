@@ -261,7 +261,17 @@ func attachCommands(l *logrus.Logger, c *config.C, ssh *sshd.SSHServer, f *Inter
 		Name:             "mermaid",
 		ShortDescription: "Outputs a mermaid diagram of the current network",
 		Callback: func(fs interface{}, a []string, w sshd.StringWriter) error {
-			s := RenderHostmaps(f)
+			s := RenderHostmaps(true, f)
+			err := w.WriteLine(s)
+			return err
+		},
+	})
+
+	ssh.RegisterCommand(&sshd.Command{
+		Name:             "dot",
+		ShortDescription: "Outputs a dot diagram of the current network",
+		Callback: func(fs interface{}, a []string, w sshd.StringWriter) error {
+			s := RenderHostmaps(false, f)
 			err := w.WriteLine(s)
 			return err
 		},

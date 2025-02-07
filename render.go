@@ -18,14 +18,21 @@ func RenderControlsHostmaps(controls ...*Control) string {
 	for i, c := range controls {
 		interfaces[i] = c.f
 	}
-	return RenderHostmaps(interfaces...)
+	return RenderHostmaps(false, interfaces...)
 }
 
-func RenderHostmaps(interfaces ...*Interface) string {
+func RenderHostmaps(mermaid bool, interfaces ...*Interface) string {
 	var lines []*edge
-	r := "graph TB\n"
+	r := ""
+	if mermaid {
+		r += "graph TB\n"
+	} else {
+		r += "digraph G {\n"
+		r += "\tcompound=true\n"
+	}
+
 	for _, c := range interfaces {
-		sr, se := renderHostmap(c)
+		sr, se := renderHostmap(mermaid, c)
 		r += sr
 		for _, e := range se {
 			add := true
@@ -46,76 +53,151 @@ func RenderHostmaps(interfaces ...*Interface) string {
 	}
 
 	for _, line := range lines {
-		if line.dual {
-			r += fmt.Sprintf("\t%v <--> %v\n", line.from, line.to)
+		if mermaid {
+			if line.dual {
+				r += fmt.Sprintf("\t%v <--> %v\n", line.from, line.to)
+			} else {
+				r += fmt.Sprintf("\t%v --> %v\n", line.from, line.to)
+			}
 		} else {
-			r += fmt.Sprintf("\t%v --> %v\n", line.from, line.to)
+			if line.dual {
+				r += fmt.Sprintf("\t%v -> %v [dir=both]\n", line.from, line.to)
+			} else {
+				r += fmt.Sprintf("\t%v -> %v\n", line.from, line.to)
+			}
 		}
+	}
 
+	if !mermaid {
+		r += "}\n"
 	}
 
 	return r
 }
-
-func renderHostmap(f *Interface) (string, []*edge) {
+func renderHostmap(mermaid bool, f *Interface) (string, []*edge) {
 	var lines []string
 	var globalLines []*edge
 
 	clusterName := strings.Trim(f.pki.GetCertState().Certificate.Details.Name, " ")
 	clusterVpnIp := f.pki.GetCertState().Certificate.Details.Ips[0].IP
-	r := fmt.Sprintf("\tsubgraph %s[\"%s (%s)\"]\n", clusterName, clusterName, clusterVpnIp)
+	r := ""
+	if mermaid {
+		r += fmt.Sprintf("\tsubgraph %s[\"%s (%s)\"]\n", clusterName, clusterName, clusterVpnIp)
+	} else {
+		r += fmt.Sprintf("\tsubgraph cluster_%s {\n", clusterName)
+		r += fmt.Sprintf("\t\tlabel=\"%s (%s)\"\n", clusterName, clusterVpnIp)
+	}
 
 	f.hostMap.RLock()
 	defer f.hostMap.RUnlock()
 
 	// Draw the vpn to index nodes
-	r += fmt.Sprintf("\t\tsubgraph %s.hosts[\"Hosts (vpn ip to index)\"]\n", clusterName)
+	if mermaid {
+		r += fmt.Sprintf("\t\tsubgraph %s.hosts[\"Hosts (vpn ip to index)\"]\n", clusterName)
+	} else {
+		r += fmt.Sprintf("\t\tsubgraph cluster_%s_hosts {\n", clusterName)
+		r += "\t\t\tlabel=\"Hosts (vpn ip to index)\"\n"
+	}
 	hosts := sortedHosts(f.hostMap.Hosts)
 	for _, vpnIp := range hosts {
 		hi := f.hostMap.Hosts[vpnIp]
-		r += fmt.Sprintf("\t\t\t%v.%v[\"%v\"]\n", clusterName, vpnIp, vpnIp)
-		lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, vpnIp, clusterName, hi.localIndexId))
+		if mermaid {
+			r += fmt.Sprintf("\t\t\t%v.%v[\"%v\"]\n", clusterName, vpnIp, vpnIp)
+			lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, vpnIp, clusterName, hi.localIndexId))
+		} else {
+			r += fmt.Sprintf("\t\t\t\"%v_%v\" [label=\"%v\"]\n", clusterName, vpnIp, vpnIp)
+			lines = append(lines, fmt.Sprintf("\"%v_%v\" -> \"%v_%v\"", clusterName, vpnIp, clusterName, hi.localIndexId))
+		}
 
 		for _, relayIp := range hi.relayState.CopyRelayIps() {
-			lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, vpnIp, clusterName, relayIp))
+			if mermaid {
+				lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, vpnIp, clusterName, relayIp))
+			} else {
+				lines = append(lines, fmt.Sprintf("\"%v_%v\" -> \"%v_%v\"", clusterName, vpnIp, clusterName, relayIp))
+			}
 		}
 
 		for _, relayIp := range hi.relayState.CopyRelayForIdxs() {
-			lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, vpnIp, clusterName, relayIp))
+			if mermaid {
+				lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, vpnIp, clusterName, relayIp))
+			} else {
+				lines = append(lines, fmt.Sprintf("\"%v_%v\" -> \"%v_%v\"", clusterName, vpnIp, clusterName, relayIp))
+			}
 		}
 	}
-	r += "\t\tend\n"
+	if mermaid {
+		r += "\t\tend\n"
+	} else {
+		r += "\t\t}\n"
+	}
 
 	// Draw the relay hostinfos
 	if len(f.hostMap.Relays) > 0 {
-		r += fmt.Sprintf("\t\tsubgraph %s.relays[\"Relays (relay index to hostinfo)\"]\n", clusterName)
-		for relayIndex, hi := range f.hostMap.Relays {
-			r += fmt.Sprintf("\t\t\t%v.%v[\"%v (%v)\"]\n", clusterName, relayIndex, relayIndex, hi.vpnIp)
-			lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, relayIndex, clusterName, hi.localIndexId))
+		if mermaid {
+			r += fmt.Sprintf("\t\tsubgraph %s.relays[\"Relays (relay index to hostinfo)\"]\n", clusterName)
+		} else {
+			r += fmt.Sprintf("\t\tsubgraph cluster_%s_relays {\n", clusterName)
+			r += "\t\t\tlabel=\"Relays (relay index to hostinfo)\"\n"
 		}
-		r += "\t\tend\n"
+		for relayIndex, hi := range f.hostMap.Relays {
+			if mermaid {
+				r += fmt.Sprintf("\t\t\t%v.%v[\"%v (%v)\"]\n", clusterName, relayIndex, relayIndex, hi.vpnIp)
+				lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, relayIndex, clusterName, hi.localIndexId))
+			} else {
+				r += fmt.Sprintf("\t\t\t\"%v_%v\" [label=\"%v (%v)\"]\n", clusterName, relayIndex, relayIndex, hi.vpnIp)
+				lines = append(lines, fmt.Sprintf("\"%v_%v\" -> \"%v_%v\"", clusterName, relayIndex, clusterName, hi.localIndexId))
+			}
+		}
+		if mermaid {
+			r += "\t\tend\n"
+		} else {
+			r += "\t\t}\n"
+		}
 	}
 
 	// Draw the local index to relay or remote index nodes
-	r += fmt.Sprintf("\t\tsubgraph indexes.%s[\"Indexes (index to hostinfo)\"]\n", clusterName)
+	if mermaid {
+		r += fmt.Sprintf("\t\tsubgraph indexes.%s[\"Indexes (index to hostinfo)\"]\n", clusterName)
+	} else {
+		r += fmt.Sprintf("\t\tsubgraph cluster_%s_indexes {\n", clusterName)
+		r += "\t\t\tlabel=\"Indexes (index to hostinfo)\"\n"
+	}
 	indexes := sortedIndexes(f.hostMap.Indexes)
 	for _, idx := range indexes {
 		hi, ok := f.hostMap.Indexes[idx]
 		if ok {
-			r += fmt.Sprintf("\t\t\t%v.%v[\"%v (%v)\"]\n", clusterName, idx, idx, hi.remote)
 			remoteClusterName := strings.Trim(hi.GetCert().Details.Name, " ")
-			globalLines = append(globalLines, &edge{from: fmt.Sprintf("%v.%v", clusterName, idx), to: fmt.Sprintf("%v.%v", remoteClusterName, hi.remoteIndexId)})
-			_ = hi
+			if mermaid {
+				r += fmt.Sprintf("\t\t\t%v.%v[\"%v (%v)\"]\n", clusterName, idx, idx, hi.remote)
+				globalLines = append(globalLines, &edge{
+					from: fmt.Sprintf("%v.%v", clusterName, idx),
+					to:   fmt.Sprintf("%v.%v", remoteClusterName, hi.remoteIndexId),
+				})
+			} else {
+				r += fmt.Sprintf("\t\t\t\"%v_%v\" [label=\"%v (%v)\"]\n", clusterName, idx, idx, hi.remote)
+				globalLines = append(globalLines, &edge{
+					from: fmt.Sprintf("\"%v_%v\"", clusterName, idx),
+					to:   fmt.Sprintf("\"%v_%v\"", remoteClusterName, hi.remoteIndexId),
+				})
+			}
 		}
 	}
-	r += "\t\tend\n"
+	if mermaid {
+		r += "\t\tend\n"
+	} else {
+		r += "\t\t}\n"
+	}
 
 	// Add the edges inside this host
 	for _, line := range lines {
 		r += fmt.Sprintf("\t\t%v\n", line)
 	}
 
-	r += "\tend\n"
+	if mermaid {
+		r += "\tend\n"
+	} else {
+		r += "\t}\n"
+	}
 	return r, globalLines
 }
 
