@@ -52,6 +52,9 @@ func RenderHostmaps(mermaid bool, interfaces ...*Interface) string {
 	}
 
 	sort.SliceStable(lines, func(i, j int) bool {
+		if lines[i].from == lines[j].from {
+			return lines[i].to < lines[j].to
+		}
 		return lines[i].from < lines[j].from
 	})
 	for _, line := range lines {
@@ -193,6 +196,9 @@ func renderHostmap(mermaid bool, f *Interface) (string, []*edge) {
 	}
 
 	// Add the edges inside this host
+	sort.SliceStable(lines, func(i, j int) bool {
+		return lines[i] < lines[j]
+	})
 	for _, line := range lines {
 		r += fmt.Sprintf("\t\t%v\n", line)
 	}
