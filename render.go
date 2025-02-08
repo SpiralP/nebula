@@ -8,9 +8,10 @@ import (
 )
 
 type edge struct {
-	from string
-	to   string
-	dual bool
+	from    string
+	to      string
+	dual    bool
+	invalid bool
 }
 
 func RenderControlsHostmaps(controls ...*Control) string {
@@ -28,6 +29,8 @@ func RenderHostmaps(mermaid bool, interfaces ...*Interface) string {
 		r += "graph TB\n"
 	} else {
 		r += "digraph G {\n"
+		r += "\tranksep=1\n"
+		r += "\tnode [shape=box]\n"
 	}
 
 	for _, c := range interfaces {
@@ -66,9 +69,17 @@ func RenderHostmaps(mermaid bool, interfaces ...*Interface) string {
 			}
 		} else {
 			if line.dual {
-				r += fmt.Sprintf("\t%v -> %v [dir=both]\n", line.from, line.to)
+				if line.invalid {
+					r += fmt.Sprintf("\t%v -> %v [dir=both color=red]\n", line.from, line.to)
+				} else {
+					r += fmt.Sprintf("\t%v -> %v [dir=both]\n", line.from, line.to)
+				}
 			} else {
-				r += fmt.Sprintf("\t%v -> %v\n", line.from, line.to)
+				if line.invalid {
+					r += fmt.Sprintf("\t%v -> %v [color=red]\n", line.from, line.to)
+				} else {
+					r += fmt.Sprintf("\t%v -> %v\n", line.from, line.to)
+				}
 			}
 		}
 	}
@@ -99,10 +110,10 @@ func renderHostmap(mermaid bool, f *Interface) (string, []*edge) {
 
 	// Draw the vpn to index nodes
 	if mermaid {
-		r += fmt.Sprintf("\t\tsubgraph %s.hosts[\"Hosts (vpn ip to index)\"]\n", clusterName)
+		r += fmt.Sprintf("\t\tsubgraph %s.hosts[\"Hosts\"]\n", clusterName)
 	} else {
 		r += fmt.Sprintf("\t\tsubgraph cluster_%s_hosts {\n", clusterName)
-		r += "\t\t\tlabel=\"Hosts (vpn ip to index)\"\n"
+		r += "\t\t\tlabel=\"Hosts\"\n"
 	}
 	hosts := sortedHosts(f.hostMap.Hosts)
 	for _, vpnIp := range hosts {
@@ -112,7 +123,11 @@ func renderHostmap(mermaid bool, f *Interface) (string, []*edge) {
 			lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, vpnIp, clusterName, hi.localIndexId))
 		} else {
 			r += fmt.Sprintf("\t\t\t\"%v_%v\" [label=\"%v\"]\n", clusterName, vpnIp, vpnIp)
-			lines = append(lines, fmt.Sprintf("\"%v_%v\" -> \"%v_%v\"", clusterName, vpnIp, clusterName, hi.localIndexId))
+			if !hi.remote.IsValid() {
+				lines = append(lines, fmt.Sprintf("\"%v_%v\" -> \"%v_%v\" [color=red]", clusterName, vpnIp, clusterName, hi.localIndexId))
+			} else {
+				lines = append(lines, fmt.Sprintf("\"%v_%v\" -> \"%v_%v\"", clusterName, vpnIp, clusterName, hi.localIndexId))
+			}
 		}
 
 		for _, relayIp := range hi.relayState.CopyRelayIps() {
@@ -140,19 +155,19 @@ func renderHostmap(mermaid bool, f *Interface) (string, []*edge) {
 	// Draw the relay hostinfos
 	if len(f.hostMap.Relays) > 0 {
 		if mermaid {
-			r += fmt.Sprintf("\t\tsubgraph %s.relays[\"Relays (relay index to hostinfo)\"]\n", clusterName)
+			r += fmt.Sprintf("\t\tsubgraph %s.relays[\"Relays\"]\n", clusterName)
 		} else {
 			r += fmt.Sprintf("\t\tsubgraph cluster_%s_relays {\n", clusterName)
-			r += "\t\t\tlabel=\"Relays (relay index to hostinfo)\"\n"
+			r += "\t\t\tlabel=\"Relays\"\n"
 		}
 		indexes := sortedIndexes(f.hostMap.Relays)
 		for _, relayIndex := range indexes {
 			hi := f.hostMap.Relays[relayIndex]
 			if mermaid {
-				r += fmt.Sprintf("\t\t\t%v.%v[\"%v (%v)\"]\n", clusterName, relayIndex, relayIndex, hi.vpnAddrs)
+				r += fmt.Sprintf("\t\t\t%v.%v[\"%v\\n%v\"]\n", clusterName, relayIndex, hi.vpnAddrs, relayIndex)
 				lines = append(lines, fmt.Sprintf("%v.%v --> %v.%v", clusterName, relayIndex, clusterName, hi.localIndexId))
 			} else {
-				r += fmt.Sprintf("\t\t\t\"%v_%v\" [label=\"%v (%v)\"]\n", clusterName, relayIndex, relayIndex, hi.vpnAddrs)
+				r += fmt.Sprintf("\t\t\t\"%v_%v\" [label=\"%v\\n%v\"]\n", clusterName, relayIndex, hi.vpnAddrs, relayIndex)
 				lines = append(lines, fmt.Sprintf("\"%v_%v\" -> \"%v_%v\"", clusterName, relayIndex, clusterName, hi.localIndexId))
 			}
 		}
@@ -165,10 +180,10 @@ func renderHostmap(mermaid bool, f *Interface) (string, []*edge) {
 
 	// Draw the local index to relay or remote index nodes
 	if mermaid {
-		r += fmt.Sprintf("\t\tsubgraph indexes.%s[\"Indexes (index to hostinfo)\"]\n", clusterName)
+		r += fmt.Sprintf("\t\tsubgraph indexes.%s[\"Indexes\"]\n", clusterName)
 	} else {
 		r += fmt.Sprintf("\t\tsubgraph cluster_%s_indexes {\n", clusterName)
-		r += "\t\t\tlabel=\"Indexes (index to hostinfo)\"\n"
+		r += "\t\t\tlabel=\"Indexes\"\n"
 	}
 	indexes := sortedIndexes(f.hostMap.Indexes)
 	for _, idx := range indexes {
@@ -176,16 +191,21 @@ func renderHostmap(mermaid bool, f *Interface) (string, []*edge) {
 		if ok {
 			remoteClusterName := strings.Trim(hi.GetCert().Certificate.Name(), " ")
 			if mermaid {
-				r += fmt.Sprintf("\t\t\t%v.%v[\"%v (%v)\"]\n", clusterName, idx, idx, hi.remote)
+				r += fmt.Sprintf("\t\t\t%v.%v[\"%v\\n%v\"]\n", clusterName, idx, hi.remote, idx)
 				globalLines = append(globalLines, &edge{
 					from: fmt.Sprintf("%v.%v", clusterName, idx),
 					to:   fmt.Sprintf("%v.%v", remoteClusterName, hi.remoteIndexId),
 				})
 			} else {
-				r += fmt.Sprintf("\t\t\t\"%v_%v\" [label=\"%v (%v)\"]\n", clusterName, idx, idx, hi.remote)
+				if !hi.remote.IsValid() {
+					r += fmt.Sprintf("\t\t\t\"%v_%v\" [label=\"%v\\n%v\" color=red]\n", clusterName, idx, hi.remote, idx)
+				} else {
+					r += fmt.Sprintf("\t\t\t\"%v_%v\" [label=\"%v\\n%v\"]\n", clusterName, idx, hi.remote, idx)
+				}
 				globalLines = append(globalLines, &edge{
-					from: fmt.Sprintf("\"%v_%v\"", clusterName, idx),
-					to:   fmt.Sprintf("\"%v_%v\"", remoteClusterName, hi.remoteIndexId),
+					from:    fmt.Sprintf("\"%v_%v\"", clusterName, idx),
+					to:      fmt.Sprintf("\"%v_%v\"", remoteClusterName, hi.remoteIndexId),
+					invalid: !hi.remote.IsValid(),
 				})
 			}
 		}
