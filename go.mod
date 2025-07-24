@@ -11,7 +11,7 @@ require (
 	github.com/gaissmai/bart v0.14.2
 	github.com/gogo/protobuf v1.3.2
 	github.com/google/gopacket v1.1.19
-	github.com/kardianos/service v1.2.2
+	github.com/kardianos/service v1.2.4
 	github.com/miekg/dns v1.1.62
 	github.com/nbrownus/go-metrics-prometheus v0.0.0-20210712211119-974a6260965f
 	github.com/prometheus/client_golang v1.20.5
@@ -25,7 +25,7 @@ require (
 	golang.org/x/exp v0.0.0-20241210194714-1829a127f884
 	golang.org/x/net v0.38.0
 	golang.org/x/sync v0.10.0
-	golang.org/x/sys v0.31.0
+	golang.org/x/sys v0.34.0
 	golang.org/x/term v0.30.0
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2
 	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
