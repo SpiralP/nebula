@@ -13,7 +13,7 @@
       makePackages = (pkgs: {
         default = pkgs.buildGoModule rec {
           pname = "nebula";
-          version = "1.9.6-custom" + revSuffix;
+          version = "1.9.7-custom" + revSuffix;
 
           src = lib.sourceFilesBySuffices ./. [ ".go" ".mod" ".sum" ];
 
