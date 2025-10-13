@@ -22,7 +22,6 @@ const defaultPromoteEvery = 1000       // Count of packets sent before we try mo
 const defaultReQueryEvery = 5000       // Count of packets sent before re-querying a hostinfo to the lighthouse
 const defaultReQueryWait = time.Minute // Minimum amount of seconds to wait before re-querying a hostinfo the lighthouse. Evaluated every ReQueryEvery
 const MaxRemotes = 10
-const maxRecvError = 4
 
 // MaxHostInfosPerVpnIp is the max number of hostinfos we will track for a given vpn ip
 // 5 allows for an initial handshake and each host pair re-handshaking twice
@@ -220,7 +219,6 @@ type HostInfo struct {
 	remoteIndexId   uint32
 	localIndexId    uint32
 	vpnIp           netip.Addr
-	recvError       atomic.Uint32
 	remoteCidr      *bart.Table[struct{}]
 	relayState      RelayState
 
@@ -705,13 +703,6 @@ func (i *HostInfo) SetRemoteIfPreferred(hm *HostMap, newRemote netip.AddrPort) b
 	return false
 }
 
-func (i *HostInfo) RecvErrorExceeded() bool {
-	if i.recvError.Add(1) >= maxRecvError {
-		return true
-	}
-	return true
-}
-
 func (i *HostInfo) CreateRemoteCIDR(c *cert.NebulaCertificate) {
 	if len(c.Details.Ips) == 1 && len(c.Details.Subnets) == 0 {
 		// Simple case, no CIDRTree needed
@@ -723,8 +714,7 @@ func (i *HostInfo) CreateRemoteCIDR(c *cert.NebulaCertificate) {
 		//TODO: IPV6-WORK what to do when ip is invalid?
 		nip, _ := netip.AddrFromSlice(ip.IP)
 		nip = nip.Unmap()
-		bits, _ := ip.Mask.Size()
-		remoteCidr.Insert(netip.PrefixFrom(nip, bits), struct{}{})
+		remoteCidr.Insert(netip.PrefixFrom(nip, nip.BitLen()), struct{}{})
 	}
 
 	for _, n := range c.Details.Subnets {
