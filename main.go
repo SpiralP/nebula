@@ -272,11 +272,6 @@ func Main(c *config.C, configTest bool, buildVersion string, logger *logrus.Logg
 		go handshakeManager.Run(ctx)
 	}
 
-	statsStart, err := startStats(l, c, buildVersion, configTest)
-	if err != nil {
-		return nil, util.ContextualizeIfNeeded("Failed to start stats emitter", err)
-	}
-
 	if configTest {
 		return nil, nil
 	}
@@ -298,7 +293,7 @@ func Main(c *config.C, configTest bool, buildVersion string, logger *logrus.Logg
 		ctx,
 		cancel,
 		sshStart,
-		statsStart,
+		nil,
 		dnsStart,
 		lightHouse.StartUpdateWorker,
 		connManager.Start,
